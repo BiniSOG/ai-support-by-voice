@@ -2,7 +2,7 @@
 # Downloads / exports every offline model and the sherpa-onnx Android native libraries into the
 # app. Needs internet once (the app itself never does). Used by the GitHub Actions workflow.
 #
-#   ./tools/fetch_models.sh            # from mobile/offline-voice-assistant
+#   ./tools/fetch_models.sh            # from the repository root
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
