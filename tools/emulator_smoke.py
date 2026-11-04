@@ -6,6 +6,7 @@ Home -> Create Account -> "Yes, let's start" -> type a name -> end call, in Engl
 Usage: python3 emulator_smoke.py <apk> <out_dir>
 Writes screenshots, UI dumps and logcat to <out_dir>.
 """
+import html
 import os
 import re
 import subprocess
@@ -46,7 +47,7 @@ def alive():
 
 def find(text, xml):
     for node in re.findall(r"<node [^>]*>", xml):
-        labels = re.findall(r'(?:text|content-desc)="([^"]*)"', node)
+        labels = [html.unescape(l) for l in re.findall(r'(?:text|content-desc)="([^"]*)"', node)]
         b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node)
         if b and any(text in l for l in labels if l):
             x1, y1, x2, y2 = map(int, b.groups())
@@ -56,7 +57,7 @@ def find(text, xml):
 
 def find_exact(text, xml, enabled_only=True):
     for node in re.findall(r"<node [^>]*>", xml):
-        labels = re.findall(r'(?:text|content-desc)="([^"]*)"', node)
+        labels = [html.unescape(l) for l in re.findall(r'(?:text|content-desc)="([^"]*)"', node)]
         if text not in labels:
             continue
         if enabled_only and 'enabled="false"' in node:
@@ -70,12 +71,16 @@ def find_exact(text, xml, enabled_only=True):
 
 def tap_exact(text, timeout=90):
     end = time.time() + timeout
+    tries = 0
     while time.time() < end:
         pos = find_exact(text, dump())
         if pos:
             print(f"tap '{text}' at {pos[0]},{pos[1]}")
             adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
             return
+        tries += 1
+        if tries % 2 == 0:  # maybe below the fold: scroll like a user would
+            adb("shell", "input", "swipe", "160", "480", "160", "220", "300", check=False)
         time.sleep(2)
     wait_for(f"<<{text}>>", 1)  # prints the screen and fails
 

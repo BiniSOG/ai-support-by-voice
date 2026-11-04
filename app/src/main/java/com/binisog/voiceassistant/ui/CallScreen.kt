@@ -643,15 +643,14 @@ private fun ColumnScope.ReviewPage(state: UiState, vm: AssistantViewModel) {
         }
     }
     Spacer(Modifier.height(18.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-        OutlinedButton(onClick = { vm.edit(Step.FULL_NAME) }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp)) {
-            Text(tr(lang, "Edit", "አስተካክል"))
-        }
-        Button(
-            onClick = { vm.confirm() }, modifier = Modifier.weight(2f).height(48.dp), shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Brand.Blue),
-        ) { Text(tr(lang, "Confirm & Create Account", "አረጋግጥና ክፈት"), fontSize = 14.sp) }
-    }
+    // Stacked, so the long label never wraps on narrow phones.
+    PrimaryButton(tr(lang, "Confirm & Create Account", "አረጋግጥና አካውንት ክፈት")) { vm.confirm() }
+    Spacer(Modifier.height(10.dp))
+    OutlinedButton(
+        onClick = { vm.edit(Step.FULL_NAME) },
+        modifier = Modifier.fillMaxWidth().height(48.dp).focusProperties { canFocus = false },
+        shape = RoundedCornerShape(12.dp),
+    ) { Text(tr(lang, "Edit", "አስተካክል")) }
 }
 
 @Composable
