@@ -54,6 +54,126 @@ def find(text, xml):
     return None
 
 
+def find_exact(text, xml, enabled_only=True):
+    for node in re.findall(r"<node [^>]*>", xml):
+        labels = re.findall(r'(?:text|content-desc)="([^"]*)"', node)
+        if text not in labels:
+            continue
+        if enabled_only and 'enabled="false"' in node:
+            continue
+        b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node)
+        if b:
+            x1, y1, x2, y2 = map(int, b.groups())
+            return (x1 + x2) // 2, (y1 + y2) // 2
+    return None
+
+
+def tap_exact(text, timeout=90):
+    end = time.time() + timeout
+    while time.time() < end:
+        pos = find_exact(text, dump())
+        if pos:
+            print(f"tap '{text}' at {pos[0]},{pos[1]}")
+            adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+            return
+        time.sleep(2)
+    wait_for(f"<<{text}>>", 1)  # prints the screen and fails
+
+
+def advance(until, timeout=150):
+    """Confirms the value Hana read back (Confirm / Continue / Yes) until `until` is on screen."""
+    end = time.time() + timeout
+    while time.time() < end:
+        if not alive():
+            fail(f"app died before '{until}'")
+        xml = dump()
+        if find(until, xml):
+            return
+        for button in ("Confirm", "Continue", "Yes"):
+            pos = find_exact(button, xml)
+            if pos:
+                print(f"tap '{button}' at {pos[0]},{pos[1]}")
+                adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
+                break
+        time.sleep(3)
+    wait_for(until, 1)
+
+
+def type_into(field, value):
+    tap(field, 90)
+    time.sleep(1)
+    adb("shell", "input", "text", value.replace(" ", "%s"))
+    adb("shell", "input", "keyevent", "66")
+    time.sleep(2)
+
+
+def full_account_opening():
+    """All screens of the design in English: name ... FAN, OTP, confirm, creating, success, My Account."""
+    adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity")
+    tap("English", 120)
+    time.sleep(2)
+    shot("flow-home")
+    tap("Create Account", 120)
+    tap("Answer", 30)
+    wait_for("Listening", 420)
+    shot("flow-greeting")
+    tap("Type instead", 30)
+    tap("Yes, let's start", 30)
+    type_into("Type your full name", "Abebe Kebede Bekele")
+    shot("flow-name")
+    advance("Say or pick your date of birth")
+    shot("flow-dob")
+    tap("Say or pick your date of birth", 30)
+    tap_exact("OK", 30)
+    advance("Say the city you were born in")
+    shot("flow-city")
+    tap_exact("Addis Ababa", 30)
+    advance("Say your nationality")
+    shot("flow-nationality")
+    tap_exact("Ethiopian", 30)
+    advance("Say or tap an account type")
+    shot("flow-account-type")
+    tap_exact("Savings Account", 30)
+    advance("Say or type your 12-digit FAN")
+    shot("flow-fan")
+    type_into("Say or type your 12-digit FAN", "123456789012")
+    advance("Verify with OTP")
+    shot("flow-otp")
+    xml = dump()
+    m = re.search(r'Demo SMS \(offline\): (\d{6})', xml)
+    if not m:
+        wait_for("Demo SMS (offline): <code>", 1)
+    code = m.group(1)
+    edit = re.search(r'class="android.widget.EditText"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', xml)
+    if edit:
+        x1, y1, x2, y2 = map(int, edit.groups())
+        adb("shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
+    time.sleep(1)
+    adb("shell", "input", "text", code)
+    time.sleep(2)
+    shot("flow-otp-typed")
+    tap_exact("Verify OTP", 30)
+    wait_for("Confirm Your Information", 90)
+    shot("flow-review")
+    tap_exact("Confirm & Create Account", 30)
+    wait_for("Creating Your Account", 30)
+    shot("flow-creating")
+    wait_for("Account Created Successfully", 180)
+    shot("flow-success")
+    tap_exact("Download Account Details", 30)
+    time.sleep(3)
+    if not alive():
+        fail("crash after Download Account Details")
+    tap_exact("Go to My Account", 30)
+    wait_for("Available balance", 30)
+    shot("flow-my-account")
+    tap_exact("Back to Home", 30)
+    time.sleep(3)
+    if not alive():
+        fail("crash after the account was opened")
+    print("FULL ACCOUNT OPENING PASSED")
+
+
 def wait_for(text, timeout=180):
     end = time.time() + timeout
     while time.time() < end:
@@ -200,6 +320,7 @@ for p in ("android.permission.CAMERA", "android.permission.RECORD_AUDIO"):
 
 run_call("English", "Create Account", "Answer", "Listening", "Yes, let's start", "Type your full name", "Abebe Kebede Bekele")
 run_call("አማርኛ", "አካውንት ክፈት", "መልስ", "እያዳመጠች", "አዎ፣ እንጀምር", "ሙሉ ስምዎን ይጻፉ", "Abebe Kebede Bekele")
+full_account_opening()
 
 log = save_logcat()
 found = crashes(log)

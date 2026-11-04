@@ -120,7 +120,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Emulator smoke test (start call, tap "Yes, let's start", answer)
+      - name: Emulator test (calls in English and Amharic, then a full account opening)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -137,4 +137,17 @@ jobs:
         with:
           name: emulator-smoke-test
           path: build/smoke
+
+      - name: Publish emulator screenshots (branch emulator-screenshots)
+        if: always()
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          [ -d build/smoke ] || exit 0
+          rm -rf /tmp/shots && mkdir -p /tmp/shots && cp -r build/smoke/. /tmp/shots/
+          cd /tmp/shots
+          git init -q && git checkout -q -b emulator-screenshots
+          git add -A
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Emulator screenshots for ${GITHUB_SHA}"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" emulator-screenshots
 
