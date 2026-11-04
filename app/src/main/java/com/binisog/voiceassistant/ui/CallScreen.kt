@@ -81,6 +81,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -189,7 +190,10 @@ private fun CameraPip(vm: AssistantViewModel, modifier: Modifier, width: Int = 8
 private fun MoreMenu(state: UiState, vm: AssistantViewModel) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, "More", tint = Color.White) }
+        // Not keyboard-focusable: the Enter that submits a typed answer must not open this menu.
+        IconButton(onClick = { open = true }, modifier = Modifier.focusProperties { canFocus = false }) {
+            Icon(Icons.Default.MoreVert, "More", tint = Color.White)
+        }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text(if (state.lang == Lang.EN) "አማርኛ" else "English") },
@@ -280,6 +284,7 @@ private fun ValueField(
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White)
             .border(1.dp, Color(0xFFD6DEEF), RoundedCornerShape(12.dp))
+            .focusProperties { canFocus = false }
             .clickable(enabled = !editing) { if (onEdit != null) onEdit() else if (onTyped != null) editing = true }
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
@@ -322,7 +327,7 @@ private fun ValueField(
 private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
         onClick = onClick, enabled = enabled,
-        modifier = Modifier.fillMaxWidth().height(50.dp),
+        modifier = Modifier.fillMaxWidth().height(50.dp).focusProperties { canFocus = false },
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Brand.Blue),
     ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
@@ -469,7 +474,7 @@ private fun CallControls(state: UiState, vm: AssistantViewModel, compact: Boolea
 
 @Composable
 private fun CircleButton(icon: ImageVector, description: String, bg: Color, tint: Color, size: Int, onClick: () -> Unit) {
-    Box(Modifier.size(size.dp).clip(CircleShape).background(bg).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(size.dp).clip(CircleShape).background(bg).focusProperties { canFocus = false }.clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         Icon(icon, description, tint = tint)
     }
 }
