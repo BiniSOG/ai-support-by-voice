@@ -67,6 +67,16 @@ def wait_for(text, timeout=180):
     with open(os.path.join(OUT, f"missing-{step_no}.xml"), "w") as f:
         f.write(xml)
     shot("timeout")
+    # Visible labels (with positions), so a failure can be understood from the log alone.
+    for node in re.findall(r"<node [^>]*>", xml):
+        labels = [l for l in re.findall(r'(?:text|content-desc)="([^"]*)"', node) if l]
+        b = re.search(r'bounds="([^"]*)"', node)
+        if labels:
+            print("  ui:", " | ".join(labels)[:120], b.group(1) if b else "")
+    log = adb("logcat", "-d", "-v", "brief", "-t", "60", check=False)
+    for l in log.splitlines():
+        if "AssistantVM" in l or "AndroidRuntime" in l:
+            print("  log:", l[:200])
     fail(f"'{text}' never appeared")
 
 
