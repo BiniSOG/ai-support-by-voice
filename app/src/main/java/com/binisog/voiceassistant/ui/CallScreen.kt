@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -332,7 +333,7 @@ private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> 
 @Composable
 private fun VideoCallPage(state: UiState, vm: AssistantViewModel) {
     val lang = state.lang
-    Column(Modifier.fillMaxSize().background(Color.White)) {
+    Column(Modifier.fillMaxSize().background(Color.White).imePadding()) {
         BrandHeader("Demo Bank", tr(lang, "AI Account Assistant", "የAI አካውንት ረዳት")) { MoreMenu(state, vm) }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             AgentVideo(state.speaking, { vm.speakingLevel }, Modifier.fillMaxSize())
@@ -365,10 +366,16 @@ private fun VideoCallPage(state: UiState, vm: AssistantViewModel) {
                 }
             }
         }
+        // Answer fields scroll; the call buttons below always stay on screen (small phones, keyboard).
         Column(
-            Modifier.fillMaxWidth().background(Color.White).imePadding().padding(horizontal = 16.dp).padding(top = 12.dp)
+            Modifier.fillMaxWidth().heightIn(max = 260.dp).background(Color.White)
+                .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 10.dp)
         ) {
             StepInput(state, vm)
+        }
+        Box(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 16.dp, vertical = 8.dp)) {
+            if (state.step == Step.FULL_NAME && state.pendingValue == null) ListeningBar(state, vm)
+            else CallControls(state, vm, compact = state.step != Step.GREETING)
         }
         HeardLine(state, dark = false)
     }
@@ -392,14 +399,17 @@ private fun StepInput(state: UiState, vm: AssistantViewModel) {
     val context = LocalContext.current
     val pending = state.pendingValue
     when (state.step) {
-        Step.GREETING -> CallControls(state, vm)
+        Step.GREETING -> if (state.typing) {
+            PrimaryButton(tr(lang, "Yes, let's start", "አዎ፣ እንጀምር")) { vm.onUserText(if (lang == Lang.AM) "አዎ" else "yes", typed = true) }
+        }
         Step.FULL_NAME -> {
             if (pending != null) {
                 ValueField(Icons.Default.Person, tr(lang, "Full name", "ሙሉ ስም"), pending, "", onTyped = { vm.onUserText(it, typed = true) })
                 Spacer(Modifier.height(10.dp))
                 PrimaryButton(tr(lang, "Confirm", "አረጋግጥ")) { vm.confirm() }
-            } else {
-                ListeningBar(state, vm)
+            } else if (state.typing) {
+                ValueField(Icons.Default.Person, tr(lang, "Full name", "ሙሉ ስም"), "", tr(lang, "Type your full name", "ሙሉ ስምዎን ይጻፉ"),
+                    onTyped = { vm.onUserText(it, typed = true) })
             }
         }
         Step.DOB -> {
@@ -442,10 +452,6 @@ private fun StepInput(state: UiState, vm: AssistantViewModel) {
         }
         else -> Unit
     }
-    if (state.step != Step.GREETING && (state.step != Step.FULL_NAME || pending != null)) {
-        Spacer(Modifier.height(10.dp))
-        CallControls(state, vm, compact = true)
-    }
 }
 
 /** Mic, camera, end call, more – as on design screen 2. */
@@ -458,10 +464,6 @@ private fun CallControls(state: UiState, vm: AssistantViewModel, compact: Boolea
         CircleButton(Icons.Default.Videocam, "Camera", Brand.Sky, Brand.Blue, size) { }
         CircleButton(Icons.Default.CallEnd, "End call", Brand.Red, Color.White, size + 8) { vm.endCall() }
         CircleButton(Icons.Default.Keyboard, "Type instead", if (state.typing) Brand.Blue else Brand.Sky, if (state.typing) Color.White else Brand.Blue, size) { vm.toggleTyping() }
-    }
-    if (state.typing && state.step == Step.GREETING) {
-        Spacer(Modifier.height(6.dp))
-        PrimaryButton(tr(state.lang, "Yes, let's start", "አዎ፣ እንጀምር")) { vm.onUserText(if (state.lang == Lang.AM) "አዎ" else "yes", typed = true) }
     }
 }
 
@@ -495,11 +497,6 @@ private fun ListeningBar(state: UiState, vm: AssistantViewModel) {
         CircleButton(Icons.Default.Keyboard, "Type instead", if (state.typing) Brand.Blue else Brand.Sky, if (state.typing) Color.White else Brand.Blue, 44) { vm.toggleTyping() }
         Spacer(Modifier.width(10.dp))
         CircleButton(Icons.Default.CallEnd, "End call", Brand.Red, Color.White, 52) { vm.endCall() }
-    }
-    if (state.typing) {
-        Spacer(Modifier.height(8.dp))
-        ValueField(Icons.Default.Person, tr(state.lang, "Full name", "ሙሉ ስም"), "", tr(state.lang, "Type your full name", "ሙሉ ስምዎን ይጻፉ"),
-            onTyped = { vm.onUserText(it, typed = true) })
     }
 }
 
