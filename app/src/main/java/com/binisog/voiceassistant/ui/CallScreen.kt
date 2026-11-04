@@ -85,6 +85,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -270,6 +272,9 @@ private fun ValueField(
     var editing by remember(value) { mutableStateOf(false) }
     var text by remember(value) { mutableStateOf(value) }
     val focus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val submit = { editing = false; focusManager.clearFocus(); keyboard?.hide(); if (text.isNotBlank()) onTyped?.invoke(text) }
     LaunchedEffect(editing) { if (editing) runCatching { focus.requestFocus() } }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White)
@@ -288,8 +293,11 @@ private fun ValueField(
                         onValueChange = { text = it },
                         singleLine = true,
                         textStyle = TextStyle(fontSize = 17.sp, color = Brand.Ink),
-                        keyboardOptions = KeyboardOptions(keyboardType = if (digits) KeyboardType.Number else KeyboardType.Text),
-                        keyboardActions = KeyboardActions(onDone = { editing = false; if (text.isNotBlank()) onTyped(text) }),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = if (digits) KeyboardType.Number else KeyboardType.Text,
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { submit() }),
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     )
                 } else {
@@ -302,7 +310,7 @@ private fun ValueField(
             }
             IconButton(onClick = {
                 if (onEdit != null) onEdit()
-                else if (editing && onTyped != null) { editing = false; if (text.isNotBlank()) onTyped(text) }
+                else if (editing && onTyped != null) submit()
                 else editing = true
             }) { Icon(if (editing) Icons.Default.Check else Icons.Default.Edit, "Edit", tint = Brand.Blue, modifier = Modifier.size(20.dp)) }
         }
@@ -568,7 +576,8 @@ private fun ColumnScope.OtpPage(state: UiState, vm: AssistantViewModel) {
         )
     }
     Spacer(Modifier.height(24.dp))
-    PrimaryButton(tr(lang, "Verify OTP", "OTP አረጋግጥ"), enabled = code.length == 6) { vm.onUserText(code, typed = true); typed = "" }
+    val otpFocus = LocalFocusManager.current
+    PrimaryButton(tr(lang, "Verify OTP", "OTP አረጋግጥ"), enabled = code.length == 6) { otpFocus.clearFocus(); vm.onUserText(code, typed = true); typed = "" }
 }
 
 private fun Modifier.matchParentSizeCompat() = this.size(310.dp, 52.dp)
