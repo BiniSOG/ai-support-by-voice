@@ -491,7 +491,9 @@ private fun ListeningBar(state: UiState, vm: AssistantViewModel) {
                 Box(Modifier.width(3.dp).height(h.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.9f)))
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
+        CircleButton(Icons.Default.Keyboard, "Type instead", if (state.typing) Brand.Blue else Brand.Sky, if (state.typing) Color.White else Brand.Blue, 44) { vm.toggleTyping() }
+        Spacer(Modifier.width(10.dp))
         CircleButton(Icons.Default.CallEnd, "End call", Brand.Red, Color.White, 52) { vm.endCall() }
     }
     if (state.typing) {

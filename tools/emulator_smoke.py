@@ -188,8 +188,8 @@ adb("install", "-r", "-g", APK, timeout=900)
 for p in ("android.permission.CAMERA", "android.permission.RECORD_AUDIO"):
     adb("shell", "pm", "grant", PKG, p, check=False)
 
-run_call("English", "Create Account", "Answer", "Listening", "Yes, let's start", "Full name", "Abebe Kebede Bekele")
-run_call("አማርኛ", "አካውንት ክፈት", "መልስ", "እያዳመጠች", "አዎ፣ እንጀምር", "ሙሉ ስም", "Abebe Kebede Bekele")
+run_call("English", "Create Account", "Answer", "Listening", "Yes, let's start", "Type your full name", "Abebe Kebede Bekele")
+run_call("አማርኛ", "አካውንት ክፈት", "መልስ", "እያዳመጠች", "አዎ፣ እንጀምር", "ሙሉ ስምዎን ይጻፉ", "Abebe Kebede Bekele")
 
 log = save_logcat()
 found = crashes(log)
