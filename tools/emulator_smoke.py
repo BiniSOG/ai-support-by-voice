@@ -152,7 +152,12 @@ def full_account_opening():
     adb("shell", "input", "text", code)
     time.sleep(2)
     shot("flow-otp-typed")
-    tap_exact("Verify OTP", 30)
+    # The app checks the code as soon as the 6th digit is typed; the button is the fallback.
+    end = time.time() + 20
+    while time.time() < end and not find("Confirm Your Information", dump()):
+        time.sleep(2)
+    if not find("Confirm Your Information", dump()):
+        tap_exact("Verify OTP", 30)
     wait_for("Confirm Your Information", 90)
     shot("flow-review")
     tap_exact("Confirm & Create Account", 30)

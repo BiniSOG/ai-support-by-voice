@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -570,11 +571,20 @@ private fun ColumnScope.OtpPage(state: UiState, vm: AssistantViewModel) {
     }
     Spacer(Modifier.height(20.dp))
     // Six boxes; tapping them opens the keyboard.
-    Box(contentAlignment = Alignment.Center) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val otpFocus = LocalFocusManager.current
+    val otpKeyboard = LocalSoftwareKeyboardController.current
+    val verify = {
+        if (code.length == 6) {
+            otpFocus.clearFocus(); otpKeyboard?.hide()
+            vm.onUserText(code, typed = true); typed = ""
+        }
+    }
+    Box(Modifier.fillMaxWidth().widthIn(max = 340.dp), contentAlignment = Alignment.Center) {
+        // Boxes share the width, so all six fit on small phones too.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (i in 0 until 6) {
                 Box(
-                    Modifier.size(44.dp, 52.dp).clip(RoundedCornerShape(10.dp)).background(Color.White)
+                    Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(10.dp)).background(Color.White)
                         .border(1.5.dp, if (i == code.length) Brand.Blue else Color(0xFFD6DEEF), RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center,
                 ) { Text(code.getOrNull(i)?.toString() ?: "", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Brand.Ink) }
@@ -582,10 +592,17 @@ private fun ColumnScope.OtpPage(state: UiState, vm: AssistantViewModel) {
         }
         BasicTextField(
             value = typed,
-            onValueChange = { v -> typed = v.filter { it.isDigit() }.take(6) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            onValueChange = { v ->
+                typed = v.filter { it.isDigit() }.take(6)
+                if (typed.length == 6) {  // all digits in: check right away
+                    otpFocus.clearFocus(); otpKeyboard?.hide()
+                    vm.onUserText(typed, typed = true); typed = ""
+                }
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { verify() }),
             textStyle = TextStyle(color = Color.Transparent),
-            modifier = Modifier.matchParentSizeCompat().alpha(0.01f),
+            modifier = Modifier.matchParentSize().alpha(0.01f),
         )
     }
     Spacer(Modifier.height(16.dp))
@@ -598,11 +615,8 @@ private fun ColumnScope.OtpPage(state: UiState, vm: AssistantViewModel) {
         )
     }
     Spacer(Modifier.height(24.dp))
-    val otpFocus = LocalFocusManager.current
-    PrimaryButton(tr(lang, "Verify OTP", "OTP አረጋግጥ"), enabled = code.length == 6) { otpFocus.clearFocus(); vm.onUserText(code, typed = true); typed = "" }
+    PrimaryButton(tr(lang, "Verify OTP", "OTP አረጋግጥ"), enabled = code.length == 6) { verify() }
 }
-
-private fun Modifier.matchParentSizeCompat() = this.size(310.dp, 52.dp)
 
 // ---------------------------------------------------------------------- 8: confirm your information
 
