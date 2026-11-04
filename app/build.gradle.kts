@@ -14,23 +14,43 @@ android {
         targetSdk = 35
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
-        ndk {
-            // sherpa-onnx ships native libraries for these ABIs; covers practically all phones.
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+    }
+
+    // One APK per phone type instead of one big APK carrying every phone's native code:
+    // app-arm64-v8a-release.apk (almost all phones today) and app-armeabi-v7a-release.apk (old 32-bit).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
             // CI emulator smoke test runs on x86_64.
-            if (project.hasProperty("withX86")) abiFilters += "x86_64"
+            if (project.hasProperty("withX86")) include("x86_64")
+            isUniversalApk = false
         }
     }
 
     signingConfigs {
-        // Test builds are signed with the debug key so the APK can be side-loaded directly.
-        getByName("debug")
+        // One fixed TEST key for every build, so a new APK installs over the previous one
+        // (CI machines would otherwise sign each build with a fresh random debug key, and
+        // Android refuses to update an app whose signature changed). Not for production.
+        create("test") {
+            storeFile = file("test-signing.jks")
+            storePassword = "testtest"
+            keyAlias = "test"
+            keyPassword = "testtest"
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            // Remove unused code and resources (Compose/material icons are large otherwise).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("test")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("test")
         }
     }
 
@@ -53,7 +73,11 @@ android {
     }
 
     packaging {
-        jniLibs { useLegacyPackaging = true }
+        jniLibs {
+            useLegacyPackaging = true // compressed inside the APK
+            // Only the JNI library and onnxruntime are used; the C/C++ API libraries are not.
+            excludes += listOf("**/libsherpa-onnx-c-api.so", "**/libsherpa-onnx-cxx-api.so")
+        }
     }
 }
 

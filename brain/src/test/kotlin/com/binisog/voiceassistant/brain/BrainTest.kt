@@ -72,10 +72,13 @@ class UnderstandingTest {
         assertEquals(Intent.YES, Understanding.intent("እሺ እንጀምር"))
         assertEquals(Intent.NO, Understanding.intent("no"))
         assertEquals(Intent.NO, Understanding.intent("አይ ትክክል አይደለም"))
-        assertEquals(Intent.SWITCH_TO_AM, Understanding.intent("በአማርኛ"))
+        assertEquals(Intent.SWITCH_LANGUAGE, Understanding.intent("በአማርኛ")); assertEquals(Lang.AM, Understanding.requestedLanguage("በአማርኛ"))
         assertEquals(Intent.QUESTION, Understanding.intent("why are you recording me?"))
         assertEquals(Intent.QUESTION, Understanding.intent("ለምን ትቀርጹኛላችሁ"))
         assertEquals(Intent.NONE, Understanding.intent("my name is Betelhem Tesfaye Alemu"))
+        for (said in listOf("ok", "k begin", "start", "begin", "ok begin", "let's begin", "stat", "okey", "alright", "ready"))
+            assertEquals(Intent.YES, Understanding.intent(said), said)
+        assertEquals(Intent.NONE, Understanding.intent("Abebe Kebede"))
     }
 
     @Test fun names() {
@@ -177,9 +180,46 @@ class AgentTest {
         assertEquals(Step.REVIEW, a.step)
         assertEquals(Step.DOB, Understanding.fieldToEdit("change my date of birth"))
         assertEquals(Step.BIRTH_CITY, Understanding.fieldToEdit("the city is wrong"))
-        assertTrue(a.noResponse()!!.display.startsWith("እያዳመጥኩ"))
+        assertTrue(a.noResponse()!!.display.contains("አካውንቱን"))
         val sw = a.setLanguage(Lang.EN)
-        assertTrue(sw.display.startsWith("Okay"))
+        assertTrue(sw.display.contains("English"))
+    }
+
+    @Test fun soundsPersonal() {
+        val a = agent()
+        assertTrue(a.start().display.contains("Hana"))
+        a.onUtterance("yes")
+        a.onUtterance("my name is Abebe Kebede Bekele")
+        val next = a.onUtterance("yes")!!
+        assertTrue(next.display.contains("Abebe"), next.display)
+        assertTrue(!next.display.contains("{"), next.display)
+    }
+
+    @Test fun greetingAcceptsAnyShortReply() {
+        for (said in listOf("k begin", "begin", "start", "ok", "hmm let's do it", "go on then")) {
+            val a = agent()
+            a.start()
+            a.onUtterance(said)
+            assertEquals(Step.FULL_NAME, a.step, said)
+        }
+        val a = agent()
+        a.start()
+        a.onUtterance("no")
+        assertEquals(Step.GREETING, a.step)
+    }
+
+    @Test fun picksTheTranscriptionThatAnswersTheQuestion() {
+        val a = agent()
+        a.start(); a.onUtterance("yes")
+        a.onUtterance("my name is Abebe Kebede"); a.onUtterance("yes")
+        assertEquals(Step.DOB, a.step)
+        assertEquals("january fifteen two thousand", a.pickBest(listOf("january fifty in two thousands of", "january fifteen two thousand").reversed().let { listOf("jane worry fifteen too", it.first()) }))
+        assertEquals("15 January 2000", a.pickBest(listOf("fifteen generate", "15 January 2000")))
+        a.onUtterance("15 January 2000"); a.onUtterance("yes")
+        assertEquals(Step.BIRTH_CITY, a.step)
+        assertEquals("adama", a.pickBest(listOf("the bottom of", "adama")))
+        // nothing fits: the first one is used
+        assertEquals("blah", a.pickBest(listOf("blah", "blub")))
     }
 
     @Test fun guards() {

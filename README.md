@@ -2,7 +2,9 @@
 
 An Android app that opens a bank account through a voice "video call" with an AI assistant. It runs **fully offline** and speaks **English and Amharic (አማርኛ)**. While the user answers, the **front camera records the session** for identity verification.
 
-Flow (matches the design mock-up): Home → *Create Account* → assistant greets you → full name → date of birth → birth city → nationality → account type → Fayda **FAN** → **OTP** → review and confirm → account created.
+It feels like a real phone call. Tapping *Create Account* makes the phone ring with an incoming video call from "Hana". You answer, and she greets you, listens, reads back what she understood ("Abebe Kebede Bekele, did I get that right?") and replies, all by voice. She uses your first name, varies her phrasing, and asks again if you go quiet. Subtitles and a keyboard are optional.
+
+Flow (matches the design mock-up): Home → *Create Account* → incoming call → answer → assistant greets you → full name → date of birth → birth city → nationality → account type → Fayda **FAN** → **OTP** → review and confirm → account created.
 
 ## How it works
 
@@ -12,9 +14,10 @@ Flow (matches the design mock-up): Home → *Create Account* → assistant greet
 | Speech engine | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 2.0.1 (onnxruntime, C++) | Fast on-device ASR, VAD and TTS with no network |
 | English speech recognition | Streaming Zipformer transducer (20M params, int8) | Live captions while you speak, very low latency |
 | Amharic speech recognition | Meta **Omnilingual ASR** 300M CTC (int8, Apache-2.0) + Silero VAD | Recognises Amharic in Ge'ez script; far more accurate than small Whisper models for Amharic |
-| Voice replies | Meta **MMS-TTS** VITS voices (`mms-tts-amh`, `mms-tts-eng`) exported to ONNX | Free, natural Amharic voice that runs offline. Falls back to Android TTS if a voice is missing |
+| Voice replies (female) | The phone's own offline female voice when it has one for the language. Otherwise Meta **MMS-TTS** (`mms-tts-amh`, `mms-tts-eng`) exported to ONNX and shifted to a female voice by `brain/VoiceShaper.kt` (TD-PSOLA pitch plus formant shift) | Natural female voice in both languages with no network |
+| Avatar | `app/src/main/assets/avatar/agent.jpg`: AI-generated portrait of a fictional agent (Canva), animated with breathing and speech-driven head motion | Replace the file with your own agent's photo to rebrand |
 | Language model | `brain/`: a domain-scoped bilingual language model written for this task | See below |
-| Recording | CameraX front camera → `video.mp4`; microphone → `audio.wav`; answers and transcript → `session.json` | Saved per session under `Android/data/com.binisog.voiceassistant/files/sessions/`, viewable and shareable from *Saved Sessions* |
+| Recording | CameraX front camera plus both voices (customer mic and Hana's voice, time-aligned) muxed into `call_recording.mp4`. Also `audio.wav` (mic) and `session.json` (answers and transcript) | Saved per session under `Android/data/com.binisog.voiceassistant/files/sessions/`, viewable and shareable from *Saved Sessions* |
 
 ### The language model (`brain/`)
 
@@ -29,7 +32,7 @@ The Fayda/National ID lookup and the OTP SMS are **simulated** (the code is show
 
 ## Get the APK
 
-The **Offline voice assistant APK** GitHub Actions workflow builds it. Each push publishes a pre-release named *Offline voice assistant – build N* with `offline-voice-assistant.apk` attached. The APK is also uploaded as a workflow artifact.
+The **Offline voice assistant APK** GitHub Actions workflow builds it. Each push to `main` publishes a pre-release named *Offline voice assistant – build N* with `offline-voice-assistant.apk` attached. The APK is also uploaded as a workflow artifact.
 
 The APK is large (about 0.7 GB) because all models are inside it. After installing, nothing is downloaded: switch on airplane mode and it still works.
 
@@ -50,3 +53,19 @@ To change the bank name, edit `AgentConfig` in `brain/.../AccountOpeningAgent.kt
 - sherpa-onnx: Apache-2.0. Its Kotlin API files are copied unchanged into `app/src/main/java/com/k2fsa/sherpa/onnx`.
 - Omnilingual ASR: Apache-2.0. Zipformer (icefall): Apache-2.0. Silero VAD: MIT.
 - **MMS-TTS voices: CC-BY-NC-4.0, non-commercial use only.** Replace them before any commercial deployment.
+
+## Languages and size
+
+English and Amharic. To keep the app small, it ships as one APK per phone type: `offline-voice-assistant-arm64.apk` for practically every current phone, and `-32bit` for old phones. Unused code is stripped (R8), the Amharic voice uses 8-bit weights, there is no bundled English voice (the phone's own female voice is used), and the Gemini clips are stored at 16 kHz. The biggest remaining part is the Amharic speech recognizer (Omnilingual ASR 300M, about 350 MB). It is the only free offline model that recognises Amharic well.
+
+Drafts for Oromo, Tigrinya and Afar are kept in `tools/i18n/` but are not enabled. To enable them, run `python tools/i18n/gen_kotlin.py om ti aa` and add the languages back to `Lang`.
+
+### Hana's Amharic voice (recorded with Gemini)
+
+All 230 Amharic phrases were recorded once with Gemini TTS (`gemini-3.8-flash-tts`, female voice "Kore"), each verified by transcription. They live in `voice-recordings/` and are bundled into the app at build time. No API key is needed to build. To re-record after changing the texts, run `GEMINI_API_KEY=... tools/record_all_voices.sh` locally.
+
+## Listening accuracy
+
+- **Noise gate** (`speech/NoiseGate.kt`): a 100 Hz high-pass filter, an adaptive background-noise estimate, and a gate that only passes sound clearly louder than the background (about +11 dB, minimum about -38 dBFS). The call recording still keeps everything.
+- **Answer prediction** (`brain/AnswerPredictor.kt`): at each question, words that *sound like* an expected answer (yes/no, numbers, months, account types, cities, nationalities) are corrected towards it, comparing English and Ge'ez by sound. Likely answers are shown as buttons to say or tap.
+- **Two transcriptions** for English (streaming Zipformer plus Omnilingual 300M), and the dialogue uses the one that answers the question.

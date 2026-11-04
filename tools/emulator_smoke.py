@@ -102,11 +102,57 @@ def fail(msg):
     raise SystemExit(1)
 
 
-def run_call(lang_chip, create_label, listening_label, start_label, name_field, name):
+SESSIONS = f"/sdcard/Android/data/{PKG}/files/sessions"
+
+
+def app_shell(*cmd, check=False):
+    """Run as the app (debug build) – the shell user can't read Android/data on Android 11+."""
+    return adb("shell", "run-as", PKG, *cmd, check=check)
+
+
+def check_recording(tag):
+    """The ended call must leave call_recording.mp4 with video and audio (the app logs where)."""
+    line = ""
+    for _ in range(30):
+        log = adb("logcat", "-d", "-s", "CallRecording:I", check=False)
+        hits = [l for l in log.splitlines() if "saved ok=" in l]
+        if len(hits) >= CALLS_DONE[0] + 1:
+            line = hits[-1]
+            break
+        time.sleep(3)
+    print("recording:", line)
+    CALLS_DONE[0] += 1
+    if "ok=true" not in line:
+        fail(f"call recording not saved: {line or 'no log line'}")
+    path = line.split("path=")[1].split(" ")[0]
+    local = os.path.join(OUT, f"call_recording-{tag}.mp4")
+    with open(local, "wb") as f:
+        f.write(subprocess.run(["adb", "exec-out", "run-as", PKG, "cat", path], capture_output=True, timeout=120).stdout)
+    if os.path.getsize(local) == 0:
+        with open(local, "wb") as f:
+            f.write(subprocess.run(["adb", "exec-out", "cat", path], capture_output=True, timeout=120).stdout)
+    data = open(local, "rb").read()
+    if data[4:8] != b"ftyp":
+        # Release builds can't be read with run-as; the app's own log line (ok=true) must do.
+        print(f"recording saved by the app ({line.split('size=')[1].split(' ')[0]} bytes); not readable from adb on a release build")
+        return
+    print(f"recording pulled: {len(data)} bytes, video track: {b'vide' in data}, audio track: {b'soun' in data}")
+    if b"soun" not in data:
+        fail("call recording has no audio track")
+
+
+CALLS_DONE = [0]
+
+
+def run_call(lang_chip, create_label, answer_label, listening_label, start_label, name_field, name):
     adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity")
     tap(lang_chip, 120)
     time.sleep(2)
     tap(create_label, 120)
+    # Incoming call screen: answer it like a phone call.
+    wait_for(answer_label, 30)
+    shot(f"ringing-{lang_chip}")
+    tap(answer_label, 30)
     # The whole multi-sentence greeting must be spoken before the app starts listening.
     wait_for(listening_label, 420)
     shot(f"listening-{lang_chip}")
@@ -130,7 +176,10 @@ def run_call(lang_chip, create_label, listening_label, start_label, name_field, 
         fail("crash while listening")
     shot(f"reprompt-{lang_chip}")
     adb("shell", "input", "keyevent", "4")  # back = end call
-    time.sleep(3)
+    time.sleep(8)
+    if not alive():
+        fail("crash after ending the call")
+    check_recording(lang_chip)
 
 
 adb("logcat", "-c", check=False)
@@ -139,8 +188,8 @@ adb("install", "-r", "-g", APK, timeout=900)
 for p in ("android.permission.CAMERA", "android.permission.RECORD_AUDIO"):
     adb("shell", "pm", "grant", PKG, p, check=False)
 
-run_call("English", "Create Account", "Listening", "Yes, let's start", "Full name", "Abebe Kebede Bekele")
-run_call("አማርኛ", "አካውንት ክፈት", "እያዳመጥኩ", "አዎ፣ እንጀምር", "ሙሉ ስም", "Abebe Kebede Bekele")
+run_call("English", "Create Account", "Answer", "Listening", "Yes, let's start", "Full name", "Abebe Kebede Bekele")
+run_call("አማርኛ", "አካውንት ክፈት", "መልስ", "እያዳመጠች", "አዎ፣ እንጀምር", "ሙሉ ስም", "Abebe Kebede Bekele")
 
 log = save_logcat()
 found = crashes(log)

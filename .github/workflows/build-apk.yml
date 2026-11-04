@@ -2,6 +2,7 @@ name: Offline voice assistant APK
 
 on:
   push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -41,7 +42,7 @@ jobs:
       - name: Python tools for model export
         run: |
           pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
-          pip install transformers==4.46.3 onnx==1.17.0 "numpy<2.2" sherpa-onnx==2.0.1
+          pip install transformers==4.46.3 onnx==1.17.0 onnxruntime==1.20.1 "numpy<2.2" sherpa-onnx==2.0.1
 
       - name: Cache models
         uses: actions/cache@v4
@@ -49,7 +50,6 @@ jobs:
           path: |
             .models-cache
             app/src/main/assets/models/tts-am
-            app/src/main/assets/models/tts-en
           key: models-v1-${{ hashFiles('tools/fetch_models.sh', 'tools/export_mms_tts.py') }}
 
       - name: Download / export offline models
@@ -57,20 +57,39 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./tools/fetch_models.sh
 
+      - name: Bundle the pre-recorded Amharic voice (no API key needed)
+        run: |
+          ./gradlew --no-daemon -q :brain:exportVoiceScript
+          tools/record_all_voices.sh
+
       - name: Verify models end to end (TTS -> ASR)
         run: python tools/verify_models.py app/src/main/assets/models build/model-check
 
       - name: Build APK
         run: |
-          ./gradlew --no-daemon :app:assembleRelease
+          # x86_64 is built only for the emulator test (separate APK, not published).
+          ./gradlew --no-daemon :app:assembleRelease -PwithX86=true
           mkdir -p build/out
-          cp app/build/outputs/apk/release/app-release.apk build/out/offline-voice-assistant.apk
+          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk build/out/offline-voice-assistant-arm64.apk
+          cp app/build/outputs/apk/release/app-armeabi-v7a-release.apk build/out/offline-voice-assistant-32bit.apk
           ls -la build/out
+          echo "### APK sizes" >> $GITHUB_STEP_SUMMARY
+          du -h build/out/*.apk >> $GITHUB_STEP_SUMMARY
+          unzip -l build/out/offline-voice-assistant-arm64.apk | sort -k1 -n -r | head -15
+
+      - name: Check the APKs install (signature, ABI, minimum Android version)
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
+          for apk in build/out/*.apk; do
+            echo "== $apk ($(du -h $apk | cut -f1))"
+            $BT/apksigner verify --print-certs "$apk" | head -3
+            $BT/aapt2 dump badging "$apk" | grep -E "^package:|sdkVersion|native-code" | head -4
+          done
 
       - uses: actions/upload-artifact@v4
         with:
           name: offline-voice-assistant-apk
-          path: build/out/offline-voice-assistant.apk
+          path: build/out/*.apk
           compression-level: 0
 
       - uses: actions/upload-artifact@v4
@@ -78,8 +97,22 @@ jobs:
           name: model-check-audio
           path: build/model-check
 
-      - name: Build emulator test APK (adds x86_64)
-        run: ./gradlew --no-daemon :app:assembleDebug -PwithX86=true
+      - name: Publish pre-release with the APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: offline-assistant-build-${{ github.run_number }}
+          name: Offline voice assistant – build ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          body: |
+            Offline Amharic/English voice account-opening assistant (Android, arm64-v8a + armeabi-v7a).
+            Commit ${{ github.sha }} on ${{ github.ref_name }}.
+            English and Amharic. Download **`offline-voice-assistant-arm64.apk`** (almost every phone from the last 6+ years).
+            Only very old 32-bit phones need `offline-voice-assistant-32bit.apk`.
+            Allow installing from this source, then open "AI Account Assistant".
+          files: |
+            build/out/offline-voice-assistant-arm64.apk
+            build/out/offline-voice-assistant-32bit.apk
 
       - name: Enable KVM
         run: |
@@ -97,7 +130,7 @@ jobs:
           disk-size: 6000M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-snapshot -camera-front emulated -camera-back none
-          script: python3 tools/emulator_smoke.py app/build/outputs/apk/debug/app-debug.apk build/smoke
+          script: python3 tools/emulator_smoke.py app/build/outputs/apk/release/app-x86_64-release.apk build/smoke
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -105,15 +138,3 @@ jobs:
           name: emulator-smoke-test
           path: build/smoke
 
-      - name: Publish pre-release with the APK
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: offline-assistant-build-${{ github.run_number }}
-          name: Offline voice assistant – build ${{ github.run_number }}
-          target_commitish: ${{ github.sha }}
-          prerelease: true
-          body: |
-            Offline Amharic/English voice account-opening assistant (Android, arm64-v8a + armeabi-v7a).
-            Commit ${{ github.sha }} on ${{ github.ref_name }}.
-            Download `offline-voice-assistant.apk` on the phone, allow installing from this source, then open "AI Account Assistant".
-          files: build/out/offline-voice-assistant.apk

@@ -2,7 +2,7 @@
 # Downloads / exports every offline model and the sherpa-onnx Android native libraries into the
 # app. Needs internet once (the app itself never does). Used by the GitHub Actions workflow.
 #
-#   ./tools/fetch_models.sh            # from the repository root
+#   ./tools/fetch_models.sh            # from mobile/offline-voice-assistant
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -12,7 +12,7 @@ CACHE=".models-cache"
 ASSETS="app/src/main/assets/models"
 JNI="app/src/main/jniLibs"
 REL="https://github.com/k2-fsa/sherpa-onnx/releases/download"
-mkdir -p "$CACHE" "$ASSETS"/{asr-en,asr-am,vad,tts-en,tts-am} "$JNI"
+mkdir -p "$CACHE" "$ASSETS"/{asr-en,asr-am,vad,tts-am} "$JNI"
 
 fetch() { # url -> cache file
   local url="$1" out="$CACHE/$(basename "$1")"
@@ -68,16 +68,17 @@ f=$(fetch "$REL/asr-models/$OMNI.tar.bz2")
 tar xjf "$f" -C "$CACHE"
 cp "$CACHE/$OMNI/model.int8.onnx" "$ASSETS/asr-am/model.onnx"
 cp "$CACHE/$OMNI/tokens.txt" "$ASSETS/asr-am/tokens.txt"
+# Only Ge'ez, Latin and digits may come out (stops Amharic being written in Arabic script etc.).
+python3 tools/restrict_ctc_vocab.py "$ASSETS/asr-am/model.onnx" "$ASSETS/asr-am/tokens.txt"
 
 # ---- Voice activity detection ----
 cp "$(fetch "$REL/asr-models/silero_vad.onnx")" "$ASSETS/vad/silero_vad.onnx"
 
-# ---- Voices: Meta MMS VITS exported for sherpa-onnx ----
+# ---- Amharic voice: Meta MMS VITS exported for sherpa-onnx, 8-bit to keep the app small ----
+# (English is spoken by the phone's own offline voice, so no English model is bundled.)
 if [ ! -s "$ASSETS/tts-am/model.onnx" ]; then
-  python3 tools/export_mms_tts.py --lang amh --language-name Amharic --out "$ASSETS/tts-am"
+  python3 tools/export_mms_tts.py --lang amh --language-name Amharic --int8 --out "$ASSETS/tts-am"
 fi
-if [ ! -s "$ASSETS/tts-en/model.onnx" ]; then
-  python3 tools/export_mms_tts.py --lang eng --language-name English --out "$ASSETS/tts-en"
-fi
+rm -rf "$ASSETS/tts-en"
 
 du -sh "$ASSETS"/* "$JNI"/*
