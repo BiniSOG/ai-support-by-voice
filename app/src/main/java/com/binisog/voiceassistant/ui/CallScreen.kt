@@ -82,6 +82,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -274,18 +277,21 @@ private fun ValueField(
     onEdit: (() -> Unit)? = null,
     onTyped: ((String) -> Unit)? = null,
 ) {
-    var editing by remember(value) { mutableStateOf(false) }
+    // A typeable field is always a real text box (tap it and the keyboard opens); the heard
+    // value is pre-filled so it can be corrected.
     var text by remember(value) { mutableStateOf(value) }
+    var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    val submit = { editing = false; focusManager.clearFocus(); keyboard?.hide(); if (text.isNotBlank()) onTyped?.invoke(text) }
-    LaunchedEffect(editing) { if (editing) runCatching { focus.requestFocus() } }
+    val submit = {
+        focusManager.clearFocus(); keyboard?.hide()
+        if (text.isNotBlank() && text != value) onTyped?.invoke(text.trim())
+    }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White)
-            .border(1.dp, Color(0xFFD6DEEF), RoundedCornerShape(12.dp))
-            .focusProperties { canFocus = false }
-            .clickable(enabled = !editing) { if (onEdit != null) onEdit() else if (onTyped != null) editing = true }
+            .border(if (focused) 1.5.dp else 1.dp, if (focused) Brand.Blue else Color(0xFFD6DEEF), RoundedCornerShape(12.dp))
+            .then(if (onEdit != null) Modifier.focusProperties { canFocus = false }.clickable(onClick = onEdit) else Modifier)
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         if (label != null) Text(label, color = Brand.Muted, fontSize = 11.sp)
@@ -293,18 +299,26 @@ private fun ValueField(
             Icon(icon, null, tint = Brand.Blue, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f)) {
-                if (editing && onTyped != null) {
+                if (onTyped != null) {
                     BasicTextField(
                         value = text,
                         onValueChange = { text = it },
                         singleLine = true,
-                        textStyle = TextStyle(fontSize = 17.sp, color = Brand.Ink),
+                        textStyle = TextStyle(fontSize = 17.sp, color = Brand.Ink, fontWeight = FontWeight.Medium),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = if (digits) KeyboardType.Number else KeyboardType.Text,
                             imeAction = androidx.compose.ui.text.input.ImeAction.Done,
                         ),
                         keyboardActions = KeyboardActions(onDone = { submit() }),
-                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).focusRequester(focus)
+                            .onFocusChanged { focused = it.isFocused }
+                            .semantics { contentDescription = placeholder },
+                        decorationBox = { inner ->
+                            Box {
+                                if (text.isEmpty()) Text(placeholder, color = Brand.Muted, fontSize = 17.sp)
+                                inner()
+                            }
+                        },
                     )
                 } else {
                     Text(
@@ -314,11 +328,15 @@ private fun ValueField(
                     )
                 }
             }
-            IconButton(onClick = {
-                if (onEdit != null) onEdit()
-                else if (editing && onTyped != null) submit()
-                else editing = true
-            }) { Icon(if (editing) Icons.Default.Check else Icons.Default.Edit, "Edit", tint = Brand.Blue, modifier = Modifier.size(20.dp)) }
+            when {
+                onEdit != null -> IconButton(onClick = onEdit, modifier = Modifier.focusProperties { canFocus = false }) {
+                    Icon(Icons.Default.Edit, "Edit", tint = Brand.Blue, modifier = Modifier.size(20.dp))
+                }
+                onTyped != null -> IconButton(
+                    onClick = { if (focused) submit() else { runCatching { focus.requestFocus() }; keyboard?.show() } },
+                    modifier = Modifier.focusProperties { canFocus = false },
+                ) { Icon(if (focused) Icons.Default.Check else Icons.Default.Edit, if (focused) "Done" else "Edit", tint = Brand.Blue, modifier = Modifier.size(20.dp)) }
+            }
         }
     }
 }

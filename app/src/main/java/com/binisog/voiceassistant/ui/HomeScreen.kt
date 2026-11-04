@@ -105,7 +105,14 @@ fun HomeScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(tr(lang, "Language", "ቋንቋ"), color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
                     for (l in Lang.entries) {
-                        FilterChip(selected = lang == l, onClick = { onLanguage(l) }, label = { Text(l.nativeName) })
+                        FilterChip(
+                            selected = lang == l, onClick = { onLanguage(l) }, label = { Text(l.nativeName) },
+                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                containerColor = Color.White.copy(alpha = 0.15f), labelColor = Color.White,
+                                selectedContainerColor = Color.White, selectedLabelColor = Brand.Navy,
+                            ),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
+                        )
                     }
                 }
             }
