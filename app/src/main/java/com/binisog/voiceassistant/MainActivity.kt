@@ -40,6 +40,9 @@ class MainActivity : ComponentActivity() {
                     if (result.values.all { it }) vm.acceptCall()
                     else Toast.makeText(this, "Camera and microphone permissions are required for the video assistant.", Toast.LENGTH_LONG).show()
                 }
+                androidx.compose.runtime.LaunchedEffect(state.toast) {
+                    state.toast?.let { Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show(); vm.consumeToast() }
+                }
                 BackHandler(enabled = state.screen != Screen.HOME) {
                     when (state.screen) {
                         Screen.CALL -> vm.endCall()
@@ -56,6 +59,8 @@ class MainActivity : ComponentActivity() {
                             onCreateAccount = { vm.requestCall() },
                             onSessions = vm::showSessions,
                             onDismissCrash = vm::dismissCrash,
+                            onSaveServer = vm::saveServer,
+                            onTestServer = vm::testServer,
                         )
                         Screen.WAITING -> WaitingForCallScreen(state.lang, state.waitSecondsLeft, onCancel = vm::cancelWaiting)
                         Screen.RINGING -> IncomingCallScreen(
@@ -65,6 +70,9 @@ class MainActivity : ComponentActivity() {
                         )
                         Screen.CALL -> CallScreen(state, vm)
                         Screen.SESSIONS -> SessionsScreen(state.lang, vm)
+                        Screen.MY_ACCOUNT -> com.binisog.voiceassistant.ui.MyAccountScreen(
+                            state, onHome = vm::goHome, onDownload = { vm.downloadAccountDetails(this@MainActivity) },
+                        )
                     }
                 }
             }

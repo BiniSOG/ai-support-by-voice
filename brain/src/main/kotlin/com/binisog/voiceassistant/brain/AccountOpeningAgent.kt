@@ -382,6 +382,16 @@ class AccountOpeningAgent(
         return remember(currentQuestion())
     }
 
+    /** "Resend OTP": a new code, announced with the same (pre-recorded) "otpSent" prompt. */
+    fun resendOtp(): Reply? {
+        if (step != Step.OTP) return null
+        val code = (1..config.otpLength).map { random.nextInt(10) }.joinToString("")
+        otpCode = code
+        digitBuffer = ""
+        val r = sayRaw("otpSent")
+        return remember(r.copy(events = listOf(AgentEvent.OtpIssued(code))))
+    }
+
     private fun notUnderstood(): Reply {
         return remember(wrap("notUnderstood", currentQuestion()))
     }

@@ -141,7 +141,11 @@ class AgentTest {
         assertEquals("1234 5678 9012", a.pendingValue)
         val otp = a.onUtterance("yes")!!
         assertEquals(Step.OTP, a.step)
-        val code = (otp.events.single() as AgentEvent.OtpIssued).code
+        val first = (otp.events.single() as AgentEvent.OtpIssued).code
+        val resent = a.resendOtp()!!
+        val code = (resent.events.single() as AgentEvent.OtpIssued).code
+        assertEquals(Step.OTP, a.step)
+        assertEquals(first.length, code.length)
         a.onUtterance("000000".takeIf { it != code } ?: "111111")
         assertEquals(Step.OTP, a.step)
         a.onUtterance(code.map { Numbers.toWords((it - '0').toLong(), Lang.EN) }.joinToString(" "))

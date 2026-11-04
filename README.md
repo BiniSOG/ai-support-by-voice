@@ -4,7 +4,22 @@ An Android app that opens a bank account through a voice "video call" with an AI
 
 It feels like a real phone call. Tapping *Create Account* makes the phone ring with an incoming video call from "Hana". You answer, and she greets you, listens, reads back what she understood ("Abebe Kebede Bekele, did I get that right?") and replies, all by voice. She uses your first name, varies her phrasing, and asks again if you go quiet. Subtitles and a keyboard are optional.
 
-Flow (matches the design mock-up): Home → *Create Account* → incoming call → answer → assistant greets you → full name → date of birth → birth city → nationality → account type → Fayda **FAN** → **OTP** → review and confirm → account created.
+Screens (match the 10-screen design mock-up, branded *Demo Bank*):
+
+1. **Super App home**: Create Account (highlighted), Login, Send Money, Pay Bills, Mobile Top-up, More; banner; bottom bar Home / Services / Support / More.
+2. **Video call greeting**: Hana's portrait with a speech bubble, your camera in the corner, mic / camera / end call / keyboard controls.
+3. **Full name**: listening waveform with the end-call button; then the heard name to confirm.
+4. **Date of birth**: field with calendar icon, edit pencil (date picker) and *Confirm*.
+5. **Birth city** and nationality: field with location icon, edit and *Confirm*, likely answers as chips.
+6. **FAN (National ID number)** with *Continue*.
+7. **Verify with OTP**: six boxes, *Didn't receive the OTP? Resend (60s)* countdown, *Verify OTP*.
+8. **Confirm Your Information**: all details with icons, *Edit* or *Confirm & Create Account*.
+9. **Creating Your Account**: progress ring and checklist.
+10. **Account Created Successfully**: account number (copy), account type, *Go to My Account*, *Download Account Details* (PDF to Downloads).
+
+Every step is answered by voice (or by tapping/typing). Before the call: a 5-second "please wait" screen, then the phone rings and you answer.
+
+**All AI models are inside the APK** and run on the phone. Optionally, a computer on the same Wi-Fi can help with bigger models: see [`local-server/`](local-server/README.md) and *Home → Support* in the app. Without it, nothing changes: the phone works fully offline.
 
 ## How it works
 
@@ -32,9 +47,9 @@ The Fayda/National ID lookup and the OTP SMS are **simulated** (the code is show
 
 ## Get the APK
 
-The **Offline voice assistant APK** GitHub Actions workflow builds it. Each push to `main` publishes a pre-release named *Offline voice assistant – build N* with `offline-voice-assistant.apk` attached. The APK is also uploaded as a workflow artifact.
+The **Offline voice assistant APK** GitHub Actions workflow builds it. Each push to `main` publishes a pre-release on this repository's **Releases** page with `offline-voice-assistant-arm64.apk` (practically every current phone) and `offline-voice-assistant-32bit.apk` (old phones) attached. The APK is also uploaded as a workflow artifact.
 
-The APK is large (about 0.7 GB) because all models are inside it. After installing, nothing is downloaded: switch on airplane mode and it still works.
+The APK is large (about 470 MB) because all models are inside it. After installing, nothing is downloaded: switch on airplane mode and it still works.
 
 ## Build locally
 

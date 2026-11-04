@@ -27,7 +27,7 @@ sealed interface AsrEvent {
      * A finished sentence, as one or more transcriptions (best first). The dialogue picks the
      * one that answers the current question, e.g. the one that reads as a date at "date of birth".
      */
-    data class Final(val alternatives: List<String>) : AsrEvent {
+    data class Final(val alternatives: List<String>, val audio: FloatArray? = null) : AsrEvent {
         val text: String get() = alternatives.firstOrNull().orEmpty()
     }
 }
@@ -159,7 +159,7 @@ class StreamingEnglishRecognizer(assets: AssetManager, private val omni: Omnilin
             if (text.isNotEmpty()) {
                 val audio = ring.slice(utteranceStart - PAD_BEFORE, ring.total)
                 val second = runCatching { omni?.transcribe(audio) }.getOrNull()?.lowercase().orEmpty()
-                events += AsrEvent.Final(listOf(second, text).filter { it.isNotBlank() }.distinct())
+                events += AsrEvent.Final(listOf(second, text).filter { it.isNotBlank() }.distinct(), audio)
             }
             recognizer.reset(stream)
             lastPartial = ""
@@ -229,7 +229,7 @@ class VadOfflineRecognizer(assets: AssetManager, private val omni: Omnilingual) 
             val padded = ring.slice(segment.start - PAD_BEFORE, segment.start + segment.samples.size + PAD_AFTER)
             val audio = if (padded.size >= segment.samples.size) padded else segment.samples
             val text = omni.transcribe(audio)
-            if (text.isNotEmpty()) events += AsrEvent.Final(listOf(text))
+            if (text.isNotEmpty()) events += AsrEvent.Final(listOf(text), audio)
         }
         return events
     }

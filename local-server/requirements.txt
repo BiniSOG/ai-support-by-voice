@@ -1,0 +1,4 @@
+sherpa-onnx==2.0.1
+numpy
+# Optional, better English on a computer:
+# faster-whisper

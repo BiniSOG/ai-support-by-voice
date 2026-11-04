@@ -37,7 +37,7 @@ import java.io.File
 import java.time.LocalDate
 import java.util.concurrent.Executors
 
-enum class Screen { HOME, WAITING, RINGING, CALL, SESSIONS }
+enum class Screen { HOME, WAITING, RINGING, CALL, SESSIONS, MY_ACCOUNT }
 
 data class UiState(
     val screen: Screen = Screen.HOME,
@@ -71,6 +71,12 @@ data class UiState(
     val waitSecondsLeft: Int = 0,
     /** Likely answers for the current question (say or tap). */
     val suggestions: List<String> = emptyList(),
+    /** When the current OTP was sent (for the "Resend (52s)" countdown). */
+    val otpSentAt: Long = 0,
+    /** Optional AI server on the customer's computer (same Wi-Fi); empty = phone only. */
+    val serverUrl: String = "",
+    val serverStatus: String = "",
+    val toast: String? = null,
 )
 
 class AssistantViewModel(app: Application) : AndroidViewModel(app) {
@@ -111,11 +117,34 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     val speakingLevel: Float get() = voice.level
 
+    private val prefs = app.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
+    @Volatile private var server = com.binisog.voiceassistant.speech.LocalServerClient(prefs.getString("server", "") ?: "")
+
     init {
         val crash = AssistantApp.crashFile(app).takeIf { it.exists() }?.readText()
-        _state.update { it.copy(modelSummary = catalog.summary(), lastCrash = crash) }
+        _state.update { it.copy(modelSummary = catalog.summary(), lastCrash = crash, serverUrl = prefs.getString("server", "") ?: "") }
         loadModels(Lang.EN)
+        if (server.enabled) testServer()
     }
+
+    // ------------------------------------------------------------------ optional computer AI
+
+    fun saveServer(url: String) {
+        prefs.edit().putString("server", url).apply()
+        server = com.binisog.voiceassistant.speech.LocalServerClient(url)
+        _state.update { it.copy(serverUrl = url, serverStatus = if (url.isBlank()) "" else "…") }
+    }
+
+    fun testServer() {
+        val s = server
+        if (!s.enabled) { _state.update { it.copy(serverStatus = "") }; return }
+        viewModelScope.launch {
+            val status = withContext(Dispatchers.IO) { s.health() }
+            _state.update { it.copy(serverStatus = status) }
+        }
+    }
+
+    fun consumeToast() = _state.update { it.copy(toast = null) }
 
     // ------------------------------------------------------------------ models
 
@@ -278,6 +307,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
                 screen = Screen.CALL, lang = lang, modelSummary = it.modelSummary,
                 modelsLoading = it.modelsLoading, modelsMessage = it.modelsMessage, sessionDir = dir.absolutePath,
                 callStartedAt = System.currentTimeMillis(), captions = it.captions,
+                serverUrl = it.serverUrl, serverStatus = it.serverStatus,
             )
         }
         camera.start(File(dir, "video.mp4"))
@@ -373,9 +403,16 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
                             return@withContext
                         }
                         if (speaking) bargeIn()
+                        // If the customer's computer runs local-server, its (bigger) model gets a say too.
+                        val s = server
+                        val fromComputer = if (s.enabled && e.audio != null) {
+                            withContext(Dispatchers.IO) { s.transcribe(e.audio, activeLang.code) }
+                                ?.let { if (activeLang == Lang.EN) it.lowercase() else it }
+                        } else null
+                        val alternatives = (listOfNotNull(fromComputer) + e.alternatives).distinct()
                         // Of the transcriptions, use the one that answers the current question.
-                        val heard = agent?.pickBest(e.alternatives) ?: e.text
-                        Log.i(TAG, "heard ${e.alternatives} -> '$heard'")
+                        val heard = agent?.pickBest(alternatives) ?: e.text
+                        Log.i(TAG, "heard $alternatives -> '$heard'")
                         onUserText(heard, typed = false)
                     }
                 }
@@ -471,13 +508,43 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissOtp() = _state.update { it.copy(otpBanner = null) }
 
+    fun resendOtp() = agent?.resendOtp()?.let { apply(it) }
+
+    fun copyAccountNumber(context: android.content.Context) {
+        val number = _state.value.profile.accountNumber ?: return
+        val cm = context.getSystemService(android.content.ClipboardManager::class.java) ?: return
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("Account number", number))
+        _state.update { it.copy(toast = com.binisog.voiceassistant.ui.tr(it.lang, "Account number copied", "የአካውንት ቁጥሩ ተቀድቷል")) }
+    }
+
+    fun downloadAccountDetails(context: android.content.Context) {
+        val st = _state.value
+        viewModelScope.launch {
+            val msg = try {
+                val where = withContext(Dispatchers.IO) {
+                    com.binisog.voiceassistant.session.AccountPdf.save(context.applicationContext, st.profile, st.lang, sessionDir)
+                }
+                com.binisog.voiceassistant.ui.tr(st.lang, "Saved to $where", "ተቀምጧል፦ $where")
+            } catch (e: Exception) {
+                Log.e(TAG, "pdf", e)
+                "Could not save: ${e.message}"
+            }
+            _state.update { it.copy(toast = msg) }
+        }
+    }
+
+    fun showMyAccount() {
+        camera.unbind()
+        _state.update { it.copy(screen = Screen.MY_ACCOUNT) }
+    }
+
     // ------------------------------------------------------------------ assistant output
 
     private fun apply(reply: Reply, speakIt: Boolean = true) {
         val a = agent ?: return
         transcript += "assistant" to reply.display
         for (e in reply.events) when (e) {
-            is AgentEvent.OtpIssued -> _state.update { it.copy(otpBanner = e.code) }
+            is AgentEvent.OtpIssued -> _state.update { it.copy(otpBanner = e.code, otpSentAt = System.currentTimeMillis()) }
             is AgentEvent.AccountCreated -> Unit
             AgentEvent.SessionEnded -> Unit
         }
